@@ -1,14 +1,18 @@
 package com.reactive.spring.reactive_with_spring.chapter1.src;
 
 import lombok.extern.slf4j.Slf4j;
+import org.reactivestreams.Subscriber;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
 import java.time.LocalDateTime;
@@ -28,12 +32,11 @@ public class Presentation {
 
 
     @Bean
-    public CommandLineRunner run(){
+    public CommandLineRunner run() {
         return (String... args) -> {
             StopWatch stopWatch = new StopWatch();
+            System.out.println("Blocking code 요청 시작 시간" + LocalDateTime.now());
             stopWatch.start();
-
-            System.out.println("요청 시작 시간" + LocalDateTime.now());
 
             LongStream.rangeClosed(1,5)
                     .mapToObj(this::getBook)
@@ -42,12 +45,29 @@ public class Presentation {
             stopWatch.stop();
 
             System.out.println(stopWatch.prettyPrint());
-            System.exit(1);
+
+            System.out.println("Non - Blocking code 요청 시작 시간" + LocalDateTime.now());
+
+            stopWatch.start();
+            Flux<Book> bookFlux = Flux
+                    .fromStream(LongStream.rangeClosed(1, 5)
+                            .mapToObj(
+                                    l -> getNonBlockingBook(l)
+                                            .subscribeOn(Schedulers.parallel())
+                                            .block()
+                            ));
+
+            Flux.zip(bookFlux, Subscriber::onComplete)
+                    .doOnTerminate(() -> {
+                        System.out.println("Non-Blocking code 요청 종료 시간: " + LocalDateTime.now());
+                        stopWatch.stop();
+                        System.out.println(stopWatch.prettyPrint());
+                    }).subscribe();
         };
     }
 
 
-    Book getBook(@PathVariable("book-id") long bookId){
+    Book getBook(long bookId) {
         URI bookUri = UriComponentsBuilder.fromUri(uri)
                 .path("/blocking/{book-id}")
                 .build()
@@ -58,5 +78,20 @@ public class Presentation {
         ResponseEntity<Book> response = restTemplate.getForEntity(bookUri, Book.class);
         return response.getBody();
 
+    }
+
+    Mono<Book> getNonBlockingBook(long bookId) {
+        URI bookUri = UriComponentsBuilder.fromUri(uri)
+                .path("/non-blocking/{book-id}")
+                .build()
+                .expand(bookId)
+                .encode()
+                .toUri();
+
+        return WebClient.create()
+                .get()
+                .uri(bookUri)
+                .retrieve()
+                .bodyToMono(Book.class);
     }
 }
