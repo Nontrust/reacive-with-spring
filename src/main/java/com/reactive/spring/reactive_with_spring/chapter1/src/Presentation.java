@@ -1,7 +1,6 @@
 package com.reactive.spring.reactive_with_spring.chapter1.src;
 
 import lombok.extern.slf4j.Slf4j;
-import org.reactivestreams.Subscriber;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.ResponseEntity;
@@ -10,12 +9,12 @@ import org.springframework.util.StopWatch;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 import java.util.stream.LongStream;
 
 @Slf4j
@@ -46,8 +45,27 @@ public class Presentation {
 
             System.out.println(stopWatch.prettyPrint());
 
-            System.out.println("Non - Blocking code 요청 시작 시간" + LocalDateTime.now());
+            System.out.println("MonoList :: Non - Blocking code 요청 시작 시간" + LocalDateTime.now());
 
+            stopWatch.start();
+
+            List<Mono<Book>> monoBooks = LongStream.rangeClosed(1, 5)
+                    .mapToObj(this::getNonBlockingBook)
+                    .toList();
+
+            Mono.zip(monoBooks, objects ->
+                                Arrays.stream(objects).map(object->(Book) object)
+                                        .peek(System.out::println)
+                                        .toList())
+                            .doOnTerminate(() -> {
+                                System.out.println("Non-Blocking code 요청 종료 시간: " + LocalDateTime.now());
+                                stopWatch.stop();
+                                System.out.println(stopWatch.prettyPrint());
+                            }).subscribe();
+
+
+            /*
+            System.out.println("Flux :: Non - Blocking code 요청 시작 시간" + LocalDateTime.now());
             stopWatch.start();
             Flux<Book> bookFlux = Flux
                     .fromStream(LongStream.rangeClosed(1, 5)
@@ -63,6 +81,8 @@ public class Presentation {
                         stopWatch.stop();
                         System.out.println(stopWatch.prettyPrint());
                     }).subscribe();
+
+             */
         };
     }
 
